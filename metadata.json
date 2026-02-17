@@ -1,0 +1,9 @@
+{
+  "name": "ARD - Real-time Ad Discovery",
+  "description": "A location-based platform for discovering and posting local ads, services, and events that expire after 24 hours. Features AI-powered smart search and proximity sorting.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone",
+    "camera"
+  ]
+}
