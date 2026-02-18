@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { X, Camera, Image as ImageIcon, Loader2, RefreshCcw } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, Loader2, RefreshCcw, AlertCircle } from 'lucide-react';
 
 interface VisualSearchModalProps {
   onClose: () => void;
@@ -11,18 +11,31 @@ const VisualSearchModal: React.FC<VisualSearchModalProps> = ({ onClose, onSearch
   const [mode, setMode] = useState<'selection' | 'camera'>('selection');
   const [preview, setPreview] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [camError, setCamError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const startCamera = async () => {
+    setCamError(null);
     setMode('camera');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-    } catch (err) {
-      alert("Could not access camera. Please check permissions.");
+    } catch (err: any) {
+      console.error("Camera access error:", err);
+      let errorMsg = "Oga/Madam, we couldn't open your camera.";
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMsg = "Camera access denied. Please enable camera permissions in your settings.";
+      } else if (err.name === 'NotFoundError') {
+        errorMsg = "No camera found on this device.";
+      } else if (window.location.protocol !== 'https:') {
+        errorMsg = "Camera search requires a secure (HTTPS) connection.";
+      }
+      setCamError(errorMsg);
       setMode('selection');
     }
   };
@@ -82,6 +95,13 @@ const VisualSearchModal: React.FC<VisualSearchModalProps> = ({ onClose, onSearch
         </div>
 
         <div className="p-6 space-y-6">
+          {camError && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 animate-in shake duration-300">
+              <AlertCircle className="text-red-500 shrink-0" size={18} />
+              <p className="text-[10px] font-black uppercase leading-relaxed text-red-600">{camError}</p>
+            </div>
+          )}
+
           {mode === 'camera' ? (
             <div className="relative aspect-square bg-black rounded-2xl overflow-hidden">
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />

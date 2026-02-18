@@ -45,51 +45,76 @@ const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
 
   const startRecording = async () => {
     try {
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        alert("Missing API Key. Please configure your platform settings.");
+        return;
+      }
+      
       stopRecording();
       setIsRecording(true);
       onListeningStateChange(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
+      
       let stream: MediaStream;
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (permErr) { alert("Microphone access was denied."); stopRecording(); return; }
+      try { 
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true }); 
+      } catch (permErr: any) { 
+        console.error("Microphone access error:", permErr);
+        let msg = "Microphone access denied. Please enable it in your settings.";
+        if (window.location.protocol !== 'https:') msg = "Voice search requires a secure (HTTPS) connection.";
+        alert(msg); 
+        stopRecording(); 
+        return; 
+      }
+      
       streamRef.current = stream;
       const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       await inputAudioContext.resume();
       audioContextRef.current = inputAudioContext;
+      
       timeoutRef.current = window.setTimeout(() => stopRecording(true), 15000);
+      
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: {},
-          systemInstruction: 'Transcribe the user query for a Nigerian local ad platform. Only return the item or service name. Be culturally aware.',
+          systemInstruction: 'Transcribe the user query for a Nigerian local ad platform.',
         },
         callbacks: {
           onopen: () => {
-            const source = audioContextRef.current!.createMediaStreamSource(streamRef.current!);
-            const scriptProcessor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+            if (!audioContextRef.current || !streamRef.current) return;
+            const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
+            const scriptProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
             sourceRef.current = source;
             scriptProcessorRef.current = scriptProcessor;
             scriptProcessor.onaudioprocess = (e) => {
               const pcmBlob = createBlob(e.inputBuffer.getChannelData(0));
-              sessionPromise.then(s => s?.sendRealtimeInput({ media: pcmBlob }));
+              sessionPromise.then(s => s?.sendRealtimeInput({ media: pcmBlob })).catch(() => stopRecording(true));
             };
             source.connect(scriptProcessor);
-            scriptProcessor.connect(audioContextRef.current!.destination);
+            scriptProcessor.connect(audioContextRef.current.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
             if (msg.serverContent?.inputTranscription) {
               transcriptionBufferRef.current += msg.serverContent.inputTranscription.text;
               onTranscriptionPartial(transcriptionBufferRef.current);
-              if (timeoutRef.current) { window.clearTimeout(timeoutRef.current); timeoutRef.current = window.setTimeout(() => stopRecording(true), 5000); }
             }
             if (msg.serverContent?.turnComplete) stopRecording(true);
           },
-          onerror: () => stopRecording(true),
+          onerror: (e) => {
+            console.error("Live session error:", e);
+            stopRecording(true);
+          },
           onclose: () => stopRecording()
         }
       });
       sessionRef.current = await sessionPromise;
-    } catch (err) { stopRecording(); }
+    } catch (err) { 
+      console.error("Voice start error:", err);
+      stopRecording(); 
+    }
   };
 
   return (

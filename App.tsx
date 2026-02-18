@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Ad, User, Location, Category, Review, AdInsights } from './types';
-// Add missing ChevronRight import
 import { Search, Plus, Home, Compass, User as UserIcon, MapPin, SlidersHorizontal, Loader2, ChevronDown, ChevronRight, Shield, Mic, Camera, HelpCircle, Info, PhoneCall, Scale, X, Globe2, Sparkles, Zap } from 'lucide-react';
 import { calculateDistance } from './utils/location';
 import { performSmartSearch, performVisualSearch } from './services/gemini';
@@ -48,12 +47,10 @@ const App: React.FC = () => {
   const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
   const [searchResultIds, setSearchResultIds] = useState<string[] | null>(null);
 
-  // Navigation Visibility Logic
   const [isNavVisible, setIsNavVisible] = useState(true);
   const lastScrollY = useRef(0);
   const scrollTimeout = useRef<number | null>(null);
 
-  // Filters
   const [sortOrder, setSortOrder] = useState<'newest' | 'distance'>('distance');
   const [maxDistance, setMaxDistance] = useState<number>(50);
 
@@ -80,7 +77,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       try {
-        // Simulating "Connecting to Production Database..."
         const [fetchedAds, currentUser] = await Promise.all([
           db.getAds(),
           db.getCurrentUser()
@@ -98,17 +94,13 @@ const App: React.FC = () => {
     detectLocation();
   }, [detectLocation]);
 
-  // Handle Global Scroll for Nav Visibility
   const handleScroll = useCallback((e: any) => {
     const currentScrollY = e.target.scrollTop;
-    
-    // Determine scroll direction
     if (currentScrollY > lastScrollY.current && currentScrollY > 30) {
       setIsNavVisible(false);
     } else {
       setIsNavVisible(true);
     }
-    
     lastScrollY.current = currentScrollY;
 
     if (scrollTimeout.current) window.clearTimeout(scrollTimeout.current);
@@ -191,6 +183,38 @@ const App: React.FC = () => {
       }
       return nextAds;
     });
+  };
+
+  const handleTextSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery) return;
+    
+    setIsSearching(true);
+    try {
+      const res = await performSmartSearch(searchQuery, ads);
+      setSearchResultIds(res.adIds);
+      setSearchExplanation(res.explanation);
+    } catch (err) {
+      console.error("Search failed:", err);
+      setSearchExplanation("Oga, the AI is having a moment. Try again shortly!");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleVisualSearchComplete = async (img: string) => {
+    setIsSearching(true);
+    setIsVisualSearchOpen(false);
+    try {
+      const res = await performVisualSearch(img, ads);
+      setSearchResultIds(res.adIds);
+      setSearchExplanation(res.explanation);
+    } catch (err) {
+      console.error("Visual search failed:", err);
+      setSearchExplanation("We couldn't process that photo. Try a clearer one!");
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const InfoModalComponent = ({ type, onClose }: { type: 'about' | 'how' | 'contact' | 'terms', onClose: () => void }) => {
@@ -286,7 +310,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="relative group">
-             <form onSubmit={(e) => { e.preventDefault(); if(searchQuery) { setIsSearching(true); performSmartSearch(searchQuery, ads).then(res => { setSearchResultIds(res.adIds); setSearchExplanation(res.explanation); setIsSearching(false); }); } }} className="relative flex-1">
+             <form onSubmit={handleTextSearch} className="relative flex-1">
                 <input
                   type="text"
                   placeholder={isListening ? "Listening closely..." : "Discover services, events, people..."}
@@ -296,7 +320,16 @@ const App: React.FC = () => {
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-slate-100 p-1.5 rounded-[18px] shadow-inner">
                   <VoiceSearchButton 
-                    onTranscriptionComplete={(text) => setSearchQuery(text)}
+                    onTranscriptionComplete={(text) => {
+                      setSearchQuery(text);
+                      setIsSearching(true);
+                      performSmartSearch(text, ads)
+                        .then(res => {
+                          setSearchResultIds(res.adIds);
+                          setSearchExplanation(res.explanation);
+                        })
+                        .finally(() => setIsSearching(false));
+                    }}
                     onTranscriptionPartial={(text) => setSearchQuery(text)}
                     onListeningStateChange={setIsListening}
                     isProcessing={isSearching}
@@ -401,7 +434,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Dynamic Nav System */}
       <nav 
         className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-[#1a1a1a] border-t border-white/5 px-8 py-4 flex items-center justify-between z-[200] text-white transition-all duration-700 cubic-bezier(0.4, 0, 0.2, 1) shadow-[0_-20px_50px_rgba(0,0,0,0.4)] ${
           isNavVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
@@ -417,7 +449,6 @@ const App: React.FC = () => {
         </button>
       </nav>
 
-      {/* Persistence Modals */}
       {infoModal && <InfoModalComponent type={infoModal} onClose={() => setInfoModal(null)} />}
       {selectedAd && (
         <AdDetailModal 
@@ -445,7 +476,7 @@ const App: React.FC = () => {
       {isLocationModalOpen && <LocationModal onClose={() => setIsLocationModalOpen(false)} onSelect={(l) => l === 'detect' ? detectLocation() : setUserLocation(l)} currentLocation={userLocation} />}
       {isFilterModalOpen && <FilterModal onClose={() => setIsFilterModalOpen(false)} sortOrder={sortOrder} setSortOrder={setSortOrder} maxDistance={maxDistance} setMaxDistance={setMaxDistance} />}
       {isAdminPanelOpen && <AdminPanel onClose={() => setIsAdminPanelOpen(false)} ads={ads} setAds={setAds} />}
-      {isVisualSearchOpen && <VisualSearchModal onClose={() => setIsVisualSearchOpen(false)} onSearch={(img) => { setIsSearching(true); performVisualSearch(img, ads).then(res => { setSearchResultIds(res.adIds); setSearchExplanation(res.explanation); setIsSearching(false); setIsVisualSearchOpen(false); }); }} />}
+      {isVisualSearchOpen && <VisualSearchModal onClose={() => setIsVisualSearchOpen(false)} onSearch={handleVisualSearchComplete} />}
     </div>
   );
 };
